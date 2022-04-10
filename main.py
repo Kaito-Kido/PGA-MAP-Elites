@@ -14,6 +14,12 @@ from networks import Actor, Critic
 from variational_operators import VariationalOperator
 from vectorized_env import ParallelEnv
 
+from torch.multiprocessing import Pool, Process, set_start_method
+try:
+     set_start_method('spawn')
+except RuntimeError:
+    pass
+
 
 class LoadFromFile(argparse.Action):
 	def __call__ (self, parser, namespace, values, option_string = None):
