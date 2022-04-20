@@ -10,15 +10,10 @@ from functools import partial
 import os
 
 from utils import *
-from networks import Actor, Critic
+# from networks import Actor, Critic
+from model import DeterministicPolicy, Critic
 from variational_operators import VariationalOperator
 from vectorized_env import ParallelEnv
-
-from torch.multiprocessing import Pool, Process, set_start_method
-try:
-     set_start_method('spawn')
-except RuntimeError:
-    pass
 
 
 class LoadFromFile(argparse.Action):
@@ -122,25 +117,27 @@ if __name__ == "__main__":
 	# Setup functions to launch each paralell evaluation environment
 	make_fns = [partial(make_env, args.env) for _ in range(args.num_cpu)]
 	# Function that creates new actor
-	actor_fn = partial(Actor, 
+	actor_fn = partial(DeterministicPolicy, 
 				state_dim,
 				action_dim,
-				max_action,
-				args.neurons_list,
-				normalise=args.normalise,
-				affine=args.affine)
+				# max_action,
+				# args.neurons_list,
+				# normalise=args.normalise,
+				# affine=args.affine
+				)
 	# Function that create the replay buffer
 	replay_fn = partial(ReplayBuffer, state_dim, action_dim)
 	# Function to create critic
 	critic_fn = partial(Critic,
 					state_dim,
 					action_dim,
-					max_action,
-					discount=args.discount,
-					tau=args.tau,
-					policy_noise=args.policy_noise * max_action,
-					noise_clip=args.noise_clip * max_action,
-					policy_freq=args.policy_freq)
+					# max_action,
+					# discount=args.discount,
+					# tau=args.tau,
+					# policy_noise=args.policy_noise * max_action,
+					# noise_clip=args.noise_clip * max_action,
+					# policy_freq=args.policy_freq
+					)
 	# Start parallel simulations
 	envs = ParallelEnv(make_fns,
 					replay_fn,
