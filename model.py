@@ -71,9 +71,20 @@ class QNetwork(nn.Module):
 
         return x1, x2
 
+    def Q1(self, state, action):
+        sa = torch.cat([state, action], 1)
+
+        q1 = F.relu(self.linear1(sa))
+        q1 = F.relu(self.linear2(q1))
+        q1 = self.linear3(q1)
+        return q1
+
+    def save(self, filename):
+        torch.save(self.state.dict(), filename)
+
 
 class GaussianPolicy(nn.Module):
-    def __init__(self, num_inputs, num_actions):
+    def __init__(self, num_inputs, num_actions, action_space=None):
         super(GaussianPolicy, self).__init__()
 
         self.linear1 = nn.Linear(num_inputs, 256)
@@ -95,14 +106,14 @@ class GaussianPolicy(nn.Module):
             param.requires_grad = False
 
         # action rescaling
-        # if action_space is None:
-        #     self.action_scale = torch.tensor(1.)
-        #     self.action_bias = torch.tensor(0.)
-        # else:
-        #     self.action_scale = torch.FloatTensor(
-        #         (action_space.high - action_space.low) / 2.)
-        #     self.action_bias = torch.FloatTensor(
-        #         (action_space.high + action_space.low) / 2.)
+        if action_space is None:
+            self.action_scale = torch.tensor(1.)
+            self.action_bias = torch.tensor(0.)
+        else:
+            self.action_scale = torch.FloatTensor(
+                (action_space.high - action_space.low) / 2.)
+            self.action_bias = torch.FloatTensor(
+                (action_space.high + action_space.low) / 2.)
 
     def forward(self, state):
         x = F.relu(self.linear1(state))
@@ -131,10 +142,12 @@ class GaussianPolicy(nn.Module):
         self.action_bias = self.action_bias.to(device)
         return super(GaussianPolicy, self).to(device)
 
-    def select_action(self, state):
-        state = torch.FloatTensor(state.reshape(1, -1)).to(device)
-        action, _, _ = self.sample(state)
-        return action.cpu().data.numpy()[0]
+    def select_action(self, state, evaluate=False):
+        if evaluate is False:
+            action, _, _ = self.policy.sample(state)
+        else:
+            _, _, action = self.policy.sample(state)
+        return action.detach().cpu().numpy()[0]
 
     def save(self, filename):
         torch.save(self.state_dict(), filename)
@@ -153,47 +166,6 @@ class GaussianPolicy(nn.Module):
 
     def return_copy(self):
         return copy.deepcopy(self)
-
-
-class DeterministicPolicy(nn.Module):
-    def __init__(self, num_inputs, num_actions, action_space=None):
-        super(DeterministicPolicy, self).__init__()
-        self.linear1 = nn.Linear(num_inputs, 256)
-        self.linear2 = nn.Linear(256, 256)
-
-        self.mean = nn.Linear(256, num_actions)
-        self.noise = torch.Tensor(num_actions)
-
-        self.apply(weights_init_)
-
-        # action rescaling
-        if action_space is None:
-            self.action_scale = 1.
-            self.action_bias = 0.
-        else:
-            self.action_scale = torch.FloatTensor(
-                (action_space.high - action_space.low) / 2.)
-            self.action_bias = torch.FloatTensor(
-                (action_space.high + action_space.low) / 2.)
-
-    def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        mean = torch.tanh(self.mean(x)) * self.action_scale + self.action_bias
-        return mean
-
-    def sample(self, state):
-        mean = self.forward(state)
-        noise = self.noise.normal_(0., std=0.1)
-        noise = noise.clamp(-0.25, 0.25)
-        action = mean + noise
-        return action, torch.tensor(0.), mean
-
-    def to(self, device):
-        self.action_scale = self.action_scale.to(device)
-        self.action_bias = self.action_bias.to(device)
-        self.noise = self.noise.to(device)
-        return super(DeterministicPolicy, self).to(device)
 
 
 class Critic(object):
@@ -215,7 +187,6 @@ class Critic(object):
         self.policy_type = policy_type
         self.target_update_interval = target_update_interval
         self.automatic_entropy_tuning = automatic_entropy_tuning
-        self.total_it = 0
         self.actors_set = set()
         self.actors = []
         self.actor_targets = []
@@ -225,7 +196,6 @@ class Critic(object):
         self.critic_target = copy.deepcopy(self.critic)
         self.critic_optimizer = torch.optim.Adam(
             self.critic.paramers(), lr=3e-4)
-        hard_update(self.critic_target, self.critic)
 
         if self.policy_type == "Gaussian":
             # Target Entropy = −dim(A) (e.g. , -6 for HalfCheetah-v2) as given in the paper
@@ -268,7 +238,6 @@ class Critic(object):
             self.actor_optimisers.append(optimizer)
 
         for _ in range(nr_of_steps):
-            self.total_it += 1
 
             state, action, next_state, reward, not_done = replay_buffer.sample(
                 batch_size)
@@ -311,7 +280,21 @@ class Critic(object):
 
                 for param, target_param in zip(actor.parameters(), self.actor_targets[idx].parameters()):
                     target_param.data.copy_(
-                        self.tau * param.data + (1 - self.tau) * target_param.data)
+                        self.tau * param.data + (1 - self.tau) * target_param.data)\
+
+            if self.automatic_entropy_tuning:
+                alpha_loss = -(self.log_alpha * (log_pi +
+                               self.target_entropy).detach()).mean()
+
+                self.alpha_optim.zero_grad()
+                alpha_loss.backward()
+                self.alpha_optim.step()
+
+                self.alpha = self.log_alpha.exp()
+                alpha_tlogs = self.alpha.clone()  # For TensorboardX logs
+            else:
+                alpha_loss = torch.tensor(0.).to(self.device)
+                alpha_tlogs = torch.tensor(self.alpha)  # For TensorboardX logs
 
             # for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
             #     target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
