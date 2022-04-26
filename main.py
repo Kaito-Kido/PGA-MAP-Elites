@@ -1,3 +1,4 @@
+from networks import Actor
 from vectorized_env import ParallelEnv
 from variational_operators import VariationalOperator
 from model import GaussianPolicy, Critic
@@ -160,7 +161,7 @@ if __name__ == "__main__":
     # Setup functions to launch each paralell evaluation environment
     make_fns = [partial(make_env, args.env) for _ in range(args.num_cpu)]
     # Function that creates new actor
-    actor_fn = partial(GaussianPolicy,
+    actor_fn = partial(Actor,
                        state_dim,
                        action_dim,
                        # max_action,
