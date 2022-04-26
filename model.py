@@ -251,7 +251,7 @@ class Critic(object):
                         next_state, next_action)
                     target_Q = torch.min(
                         target_Q1, target_Q2) - self.alpha * next_state_log_pi
-                    target_Q[:, idx] = target_Q.squeeze()
+                    all_target_Q[:, idx] = target_Q.squeeze()
 
                 target_Q = torch.max(all_target_Q, dim=1, keepdim=True)[0]
                 target_Q = reward + not_done * self.gamma * target_Q
@@ -274,7 +274,7 @@ class Critic(object):
 
                 actor_loss = (self.alpha * log_pi - min_qf_pi).mean()
 
-                self.actor_optimizers[idx].zero_grad()
+                self.actor_optimisers[idx].zero_grad()
                 actor_loss.backward()
                 self.actor_optimisers[idx].step()
 

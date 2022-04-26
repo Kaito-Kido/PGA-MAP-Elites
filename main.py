@@ -14,8 +14,6 @@ import torch
 import gym
 gym.logger.set_level(40)
 
-# from networks import Actor, Critic
-
 
 class LoadFromFile(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
