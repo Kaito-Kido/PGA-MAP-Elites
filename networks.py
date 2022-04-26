@@ -121,13 +121,9 @@ class Actor(nn.Module):
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
 
-    def select_action(self, state, evaluate=False):
-        state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
-        if evaluate is False:
-            action, _, _ = self.policy.sample(state)
-        else:
-            _, _, action = self.policy.sample(state)
-        return action.detach().cpu().numpy()[0]
+    def select_action(self, state):
+        state = torch.FloatTensor(state.reshape(1, -1)).to(device)
+        return self(state).cpu().data.numpy().flatten()
 
     def save(self, filename):
         torch.save(self.state_dict(), filename)

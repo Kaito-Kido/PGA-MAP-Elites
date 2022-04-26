@@ -143,6 +143,7 @@ class GaussianPolicy(nn.Module):
         return super(GaussianPolicy, self).to(device)
 
     def select_action(self, state, evaluate=False):
+        state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
         if evaluate is False:
             action, _, _ = self.policy.sample(state)
         else:
