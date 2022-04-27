@@ -84,7 +84,7 @@ class QNetwork(nn.Module):
 
 
 class GaussianPolicy(nn.Module):
-    def __init__(self, num_inputs, num_actions, action_space=None):
+    def __init__(self, num_inputs, num_actions, max_action, neurons_list=[128, 128], normalise=False, affine=False, init=False, action_space=None):
         super(GaussianPolicy, self).__init__()
 
         self.linear1 = nn.Linear(num_inputs, 256)
@@ -106,24 +106,28 @@ class GaussianPolicy(nn.Module):
             param.requires_grad = False
 
         # action rescaling
-        if action_space is None:
-            self.action_scale = torch.tensor(1.)
-            self.action_bias = torch.tensor(0.)
-        else:
-            self.action_scale = torch.FloatTensor(
-                (action_space.high - action_space.low) / 2.)
-            self.action_bias = torch.FloatTensor(
-                (action_space.high + action_space.low) / 2.)
+        # if action_space is None:
+        #     self.action_scale = torch.tensor(1.)
+        #     self.action_bias = torch.tensor(0.)
+        # else:
+        #     self.action_scale = torch.FloatTensor(
+        #         (action_space.high - action_space.low) / 2.)
+        #     self.action_bias = torch.FloatTensor(
+        #         (action_space.high + action_space.low) / 2.)
 
     def forward(self, state):
+        print(state)
         x = F.relu(self.linear1(state))
         x = F.relu(self.linear2(x))
         mean = self.mean_linear(x)
         log_std = self.log_std_linear(x)
         log_std = torch.clamp(log_std, min=LOG_SIG_MIN, max=LOG_SIG_MAX)
+        print(mean, log_std)
         return mean, log_std
 
     def sample(self, state):
+        # print(0)
+        # print("state:", state)
         mean, log_std = self.forward(state)
         std = log_std.exp()
         normal = Normal(mean, std)
@@ -131,24 +135,29 @@ class GaussianPolicy(nn.Module):
         y_t = torch.tanh(x_t)
         action = y_t * self.action_scale + self.action_bias
         log_prob = normal.log_prob(x_t)
+        print(1)
         # Enforcing Action Bound
         log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
+        print("action:", action)
+        print(2)
         return action, log_prob, mean
 
-    def to(self, device):
-        self.action_scale = self.action_scale.to(device)
-        self.action_bias = self.action_bias.to(device)
-        return super(GaussianPolicy, self).to(device)
+    # def to(self, device):
+    #     self.action_scale = self.action_scale.to(device)
+    #     self.action_bias = self.action_bias.to(device)
+    #     return super(GaussianPolicy, self).to(device)
 
     def select_action(self, state, evaluate=False):
-        state = torch.FloatTensor(state).to(self.device).unsqueeze(0)
+        # print(state)
         if evaluate is False:
-            action, _, _ = self.policy.sample(state)
+            action, _, _ = self.sample(state)
         else:
-            _, _, action = self.policy.sample(state)
-        return action.detach().cpu().numpy()[0]
+            _, _, action = self.sample(state)
+
+        # print("action:", action)
+        return action.cpu().data.numpy().flatten()
 
     def save(self, filename):
         torch.save(self.state_dict(), filename)
@@ -174,8 +183,14 @@ class Critic(object):
         self,
         state_dim,
         action_dim,
-        gamma=0.99,
+        max_action,
+        discount=0.99,
         tau=0.005,
+        policy_noise=0.2,
+        noise_clip=0.5,
+        policy_freq=2,
+        # tau=0.005,
+        gamma=0.99,
         alpha=0.2,
         policy_type="Gaussian",
         target_update_interval=1,
@@ -193,33 +208,16 @@ class Critic(object):
         self.actor_targets = []
         self.actor_optimisers = []
 
+
         self.critic = CriticNetwork(state_dim, action_dim).to(device)
         self.critic_target = copy.deepcopy(self.critic)
         self.critic_optimizer = torch.optim.Adam(
-            self.critic.paramers(), lr=3e-4)
+            self.critic.parameters(), lr=3e-4)
 
-        if self.policy_type == "Gaussian":
-            # Target Entropy = −dim(A) (e.g. , -6 for HalfCheetah-v2) as given in the paper
-            if self.automatic_entropy_tuning is True:
-                self.target_entropy = - \
-                    torch.prod(torch.Tensor(
-                        action_dim.shape).to(device)).item()
-                self.log_alpha = torch.zeros(
-                    1, requires_grad=True, device=device)
-                self.alpha_optim = torch.optim.Adam([self.log_alpha], lr=3e-4)
 
-            self.policy = GaussianPolicy(
-                state_dim, action_dim.shape[0], 26, action_dim).to(device)
-            self.policy_optim = torch.optim.Adam(
-                self.policy.parameters(), lr=3e-4)
 
-        else:
-            self.alpha = 0
-            self.automatic_entropy_tuning = False
-            self.policy = DeterministicPolicy(
-                state_dim, action_dim.shape[0], 256, action_dim).to(self.device)
-            self.policy_optim = torch.optim.Adam(
-                self.policy.parameters(), lr=3e-4)
+
+        
 
     def train(self, archive, replay_buffer, nr_of_steps, batch_size=256):
         diff = set(archive.keys()) - self.actors_set
@@ -239,6 +237,7 @@ class Critic(object):
             self.actor_optimisers.append(optimizer)
 
         for _ in range(nr_of_steps):
+
 
             state, action, next_state, reward, not_done = replay_buffer.sample(
                 batch_size)
@@ -294,7 +293,7 @@ class Critic(object):
                 self.alpha = self.log_alpha.exp()
                 alpha_tlogs = self.alpha.clone()  # For TensorboardX logs
             else:
-                alpha_loss = torch.tensor(0.).to(self.device)
+                alpha_loss = torch.tensor(0.).to(device)
                 alpha_tlogs = torch.tensor(self.alpha)  # For TensorboardX logs
 
             # for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
@@ -302,6 +301,8 @@ class Critic(object):
 
             if nr_of_steps % self.target_update_interval == 0:
                 soft_update(self.critic_target, self.critic, self.tau)
+        
+        print("critic_loss", critic_loss)
 
         return critic_loss
 
@@ -315,3 +316,4 @@ class Critic(object):
         self.critic_optimizer.load_state_dict(torch.load(
             filename + "_critic_optimizer", map_location=torch.device('cpu')))
         self.critic_target = copy.deepcopy(self.critic)
+

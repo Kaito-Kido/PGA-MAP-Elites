@@ -162,10 +162,10 @@ if __name__ == "__main__":
     actor_fn = partial(Actor,
                        state_dim,
                        action_dim,
-                       # max_action,
-                       # args.neurons_list,
-                       # normalise=args.normalise,
-                       # affine=args.affine
+                       max_action,
+                       args.neurons_list,
+                       normalise=args.normalise,
+                       affine=args.affine
                        )
     # Function that create the replay buffer
     replay_fn = partial(ReplayBuffer, state_dim, action_dim)
@@ -173,12 +173,12 @@ if __name__ == "__main__":
     critic_fn = partial(Critic,
                         state_dim,
                         action_dim,
-                        # max_action,
-                        # discount=args.discount,
-                        # tau=args.tau,
-                        # policy_noise=args.policy_noise * max_action,
-                        # noise_clip=args.noise_clip * max_action,
-                        # policy_freq=args.policy_freq
+                        max_action,
+                        discount=args.discount,
+                        tau=args.tau,
+                        policy_noise=args.policy_noise * max_action,
+                        noise_clip=args.noise_clip * max_action,
+                        policy_freq=args.policy_freq
                         )
     # Start parallel simulations
     envs = ParallelEnv(make_fns,
@@ -215,12 +215,14 @@ if __name__ == "__main__":
     kdt = KDTree(c, leaf_size=30, metric='euclidean')  # main k-nn
     s_kdt = KDTree(sc, leaf_size=30, metric='euclidean')  # species k-nn
 
+
     archive = {}  # init archive (empty)
     s_archive = {}  # init species archive (empty)
     n_evals = 0  # number of evaluations since the beginning
     b_evals = 0  # number evaluation since the last dump
     # track max fit for extra evaluations to check robustness
     max_fit = -float("inf")
+
 
     # Enter MAP-Elites loop
     while (n_evals < args.max_evals):
@@ -231,7 +233,6 @@ if __name__ == "__main__":
             print("Random Loop")
             for i in range(0, args.init_batch_size):
                 to_evaluate += [actor_fn()]
-
         else:
             print("Selection/Variation Loop")
             # Sync critic training
@@ -295,6 +296,7 @@ if __name__ == "__main__":
                     [archive[max_actor_desc].x for _ in range(10)], eval_mode=True)
                 ave_fit = sum([s[0] for s in sol])/10
                 ave_desc = sum([s[1] for s in sol])/10
+
 
             log_file.write("{} {} {} {} {} {} {} {} {} {} {}\n".format(n_evals,
                                                                        len(archive.keys(

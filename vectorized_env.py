@@ -126,6 +126,7 @@ def parallel_worker(process_id,
                         reward_array = np.vstack((reward, reward_array))
                         done_bool_array = np.vstack((done_bool, done_bool_array))
                     state = next_state
+                print("parallel:", idx, env.tot_reward, env.desc, env.alive, env.T)
                 eval_out_queue.put((idx, (env.tot_reward, env.desc, env.alive, env.T)))
                 if not eval_mode:
                     trans_out_queue.put((idx, (state_array, action_array, next_state_array, reward_array, done_bool_array)))
@@ -172,6 +173,7 @@ class ParallelEnv(object):
                                         self.close_processes,
                                         self.remotes[process_id],
                                         self.seed)) for process_id, env_fn in enumerate(env_fns)]
+        
 
         for p in self.processes:
             p.daemon = True

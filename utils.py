@@ -161,6 +161,13 @@ def cvt(k, dim, samples, cvt_use_cache=True):
     write_centroids(k_means.cluster_centers_)
     return k_means.cluster_centers_
 
+def soft_update(target, source, tau):
+    for target_param, param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+
+def hard_update(target, source):
+    for target_param, param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(param.data)
 
 
 def make_hashable(array):

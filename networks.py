@@ -24,131 +24,125 @@ epsilon = 1e-6
 
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, max_action, neurons_list=[128, 128], normalise=False, affine=False, init=False, action_space=None):
-        super(Actor, self).__init__()
-        self.weight_init_fn = nn.init.xavier_uniform_
-        self.num_layers = len(neurons_list)
-        self.normalise = normalise
-        self.affine = affine
+	def __init__(self, state_dim, action_dim, max_action, neurons_list=[128, 128], normalise=False, affine=False, init=False, action_space=None):
+		super(Actor, self).__init__()
+		self.weight_init_fn = nn.init.xavier_uniform_
+		self.num_layers = len(neurons_list)
+		self.normalise = normalise
+		self.affine = affine
 
-        if self.num_layers == 1:
+		if self.num_layers == 1:
 
-            self.l1 = nn.Linear(
-                state_dim, neurons_list[0], bias=(not self.affine))
-            self.l2 = nn.Linear(
-                neurons_list[0], action_dim, bias=(not self.affine))
+			self.l1 = nn.Linear(state_dim, neurons_list[0], bias=(not self.affine))
+			self.l2 = nn.Linear(neurons_list[0], action_dim, bias=(not self.affine))
 
-            if self.normalise:
-                self.n1 = nn.LayerNorm(
-                    neurons_list[0], elementwise_affine=self.affine)
-                self.n2 = nn.LayerNorm(
-                    action_dim, elementwise_affine=self.affine)
+			if self.normalise:
+				self.n1 = nn.LayerNorm(neurons_list[0], elementwise_affine=self.affine)
+				self.n2 = nn.LayerNorm(action_dim, elementwise_affine=self.affine)
 
-        if self.num_layers == 2:
-            self.l1 = nn.Linear(
-                state_dim, neurons_list[0], bias=(not self.affine))
-            self.l2 = nn.Linear(
-                neurons_list[0], neurons_list[1], bias=(not self.affine))
-            self.l3 = nn.Linear(
-                neurons_list[1], action_dim, bias=(not self.affine))
-            self.log_std_linear = nn.Linear(neurons_list[1], action_dim)
+		if self.num_layers == 2:
+			self.l1 = nn.Linear(state_dim, neurons_list[0], bias=(not self.affine))
+			self.l2 = nn.Linear(
+			    neurons_list[0], neurons_list[1], bias=(not self.affine))
+			self.l3 = nn.Linear(neurons_list[1], action_dim, bias=(not self.affine))
+			self.log_std_linear = nn.Linear(neurons_list[1], action_dim)
 
-            if self.normalise:
-                self.n1 = nn.LayerNorm(
-                    neurons_list[0], elementwise_affine=self.affine)
-                self.n2 = nn.LayerNorm(
-                    neurons_list[1], elementwise_affine=self.affine)
-                self.n3 = nn.LayerNorm(
-                    action_dim, elementwise_affine=self.affine)
+			if self.normalise:
+				self.n1 = nn.LayerNorm(neurons_list[0], elementwise_affine=self.affine)
+				self.n2 = nn.LayerNorm(neurons_list[1], elementwise_affine=self.affine)
+				self.n3 = nn.LayerNorm(action_dim, elementwise_affine=self.affine)
 
-        if action_space is None:
-            self.action_scale = torch.tensor(1.)
-            self.action_bias = torch.tensor(0.)
-        else:
-            self.action_scale = torch.FloatTensor(
-                (action_space.high - action_space.low) / 2.)
-            self.action_bias = torch.FloatTensor(
-                (action_space.high + action_space.low) / 2.)
+		if action_space is None:
+			self.action_scale = torch.tensor(1.)
+			self.action_bias = torch.tensor(0.)
+		else:
+			self.action_scale = torch.FloatTensor(
+				(action_space.high - action_space.low) / 2.)
+			self.action_bias = torch.FloatTensor(
+				(action_space.high + action_space.low) / 2.)
 
-        self.max_action = max_action
+		self.max_action = max_action
 
-        for param in self.parameters():
-            param.requires_grad = False
+		for param in self.parameters():
+			param.requires_grad = False
 
-        self.apply(self.init_weights)
+		self.apply(self.init_weights)
 
-        self.type = None
-        self.id = None
-        self.parent_1_id = None
-        self.parent_2_id = None
-        self.novel = None
-        self.delta_f = None
+		self.type = None
+		self.id = None
+		self.parent_1_id = None
+		self.parent_2_id = None
+		self.novel = None
+		self.delta_f = None
 
-    def forward(self, state):
-        if self.num_layers == 1:
-            if self.normalise:
-                a = F.relu(self.n1(self.l1(state)))
-                return self.max_action * torch.tanh(self.n2(self.l2(a)))
-            else:
-                a = F.relu(self.l1(state))
-                return self.max_action * torch.tanh(self.l2(a))
-        if self.num_layers == 2:
-            if self.normalise:
-                a = F.relu(self.n1(self.l1(state)))
-                a = F.relu(self.n2(self.l2(a)))
-                return self.max_action * torch.tanh(self.n3(self.l3(a)))
+	def forward(self, state):
+		if self.num_layers == 1:
+			if self.normalise:
+				a = F.relu(self.n1(self.l1(state)))
+				return self.max_action * torch.tanh(self.n2(self.l2(a)))
+			else:
+				a = F.relu(self.l1(state))
+				return self.max_action * torch.tanh(self.l2(a))
+		if self.num_layers == 2:
+			if self.normalise:
+				a = F.relu(self.n1(self.l1(state)))
+				a = F.relu(self.n2(self.l2(a)))
+				return self.max_action * torch.tanh(self.n3(self.l3(a)))
 
-            else:
-                a = F.relu(self.l1(state))
-                a = F.relu(self.l2(a))
-                return self.max_action * torch.tanh(self.l3(a))
+			else:
+				a = F.relu(self.l1(state))
+				a = F.relu(self.l2(a))
+				return self.max_action * torch.tanh(self.l3(a))
 
-    def sample(self, state):
-        x = F.relu(self.l1(state))
-        x = F.relu(self.l2(x))
-        mean = self.l3(x)
-        log_std = self.log_std_linear(x)
-        log_std = torch.clamp(log_std, min=LOG_SIG_MIN, max=LOG_SIG_MAX)
-        std = log_std.exp()
-        normal = Normal(mean, std)
-        x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
-        y_t = torch.tanh(x_t)
-        action = y_t * self.action_scale + self.action_bias
-        log_prob = normal.log_prob(x_t)
-        # Enforcing Action Bound
-        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
-        log_prob = log_prob.sum(1, keepdim=True)
-        mean = torch.tanh(mean) * self.action_scale + self.action_bias
-        return action, log_prob, mean
+	def sample(self, state):
+		x = F.relu(self.l1(state))
+		x = F.relu(self.l2(x))
+		mean = self.l3(x)
+		log_std = self.log_std_linear(x)
+		log_std = torch.clamp(log_std, min=LOG_SIG_MIN, max=LOG_SIG_MAX)
+		std = log_std.exp()
+		normal = Normal(mean, std)
+		x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
+		y_t = torch.tanh(x_t)
+		action = y_t * self.action_scale + self.action_bias
+		log_prob = normal.log_prob(x_t)
+		# Enforcing Action Bound
+		log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
+		log_prob = log_prob.sum(1, keepdim=True)
+		mean = torch.tanh(mean) * self.action_scale + self.action_bias
+		return action, log_prob, mean
 
-    def select_action(self, state):
-        state = torch.FloatTensor(state.reshape(1, -1)).to(device)
-        return self(state).cpu().data.numpy().flatten()
+	def select_action(self, state):
+		state = torch.FloatTensor(state.reshape(1, -1)).to(device)
+		return self(state).cpu().data.numpy().flatten()
 
-    def save(self, filename):
-        torch.save(self.state_dict(), filename)
+	def save(self, filename):
+		torch.save(self.state_dict(), filename)
 
-    def load(self, filename):
-        self.load_state_dict(torch.load(
-            filename, map_location=torch.device('cpu')))
+	def load(self, filename):
+		self.load_state_dict(torch.load(filename, map_location=torch.device('cpu')))
 
-    def init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            self.weight_init_fn(m.weight)
-        if isinstance(m, nn.LayerNorm):
-            pass
+	def init_weights(self, m):
+		if isinstance(m, nn.Linear):
+			self.weight_init_fn(m.weight)
+		if isinstance(m, nn.LayerNorm):
+			pass
 
-    def disable_grad(self):
-        for param in self.parameters():
-            param.requires_grad = False
 
-    def enable_grad(self):
-        for param in self.parameters():
-            param.requires_grad = True
+	def disable_grad(self):
+		for param in self.parameters():
+			param.requires_grad = False
 
-    def return_copy(self):
-        return copy.deepcopy(self)
+	
+	def enable_grad(self):
+		for param in self.parameters():
+			param.requires_grad = True
 
+
+	def return_copy(self):
+		return copy.deepcopy(self)
+
+	
 
 class CriticNetwork(nn.Module):
 
